@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import api from '../services/api';
 
 export const AuthContext = createContext();
@@ -9,18 +9,47 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // Secure storage functions
+  const setSecureStorage = (key, value) => {
+    try {
+      localStorage.setItem(key, value);
+    } catch (err) {
+      console.error('LocalStorage error:', err);
+      throw new Error('Failed to store authentication data');
+    }
+  };
+
+  const getSecureStorage = (key) => {
+    try {
+      return localStorage.getItem(key);
+    } catch (err) {
+      console.error('LocalStorage error:', err);
+      return null;
+    }
+  };
 
   // Initialize authentication state
   const initializeAuth = useCallback(async () => {
     try {
-      const token = localStorage.getItem('token');
-      const userData = JSON.parse(localStorage.getItem('user') || 'null');
+      const token = getSecureStorage('token');
+      const userData = JSON.parse(getSecureStorage('user') || 'null');
       
       if (token && userData) {
-        // Set auth header and validate token
         api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-        await api.get('/auth/validate');
-        setUser(userData);
+        
+        // Validate token with backend
+        const response = await api.get('/auth/validate');
+        
+        // Update user data with fresh data from validation
+        const updatedUser = {
+          ...response.data.user,
+          role: response.data.user.role.toLowerCase()
+        };
+        
+        setSecureStorage('user', JSON.stringify(updatedUser));
+        setUser(updatedUser);
       }
     } catch (err) {
       console.error('Session validation failed:', err);
@@ -39,50 +68,78 @@ export const AuthProvider = ({ children }) => {
     setError(null);
     
     try {
-      const response = await api.post('/auth/login', { email, password });
+      const response = await api.post('/auth/login', { 
+        email: email.trim().toLowerCase(),
+        password 
+      });
       
-      // Normalize user data
+      // Normalize and validate user data
       const userData = {
-        ...response.data.user,
-        role: response.data.user.role.toLowerCase()
+        id: response.data.user.id,
+        email: response.data.user.email,
+        name: response.data.user.name,
+        role: response.data.user.role.toLowerCase(),
+        createdAt: response.data.user.createdAt
       };
-      
+
       // Store auth data
-      localStorage.setItem('token', response.data.token);
-      localStorage.setItem('user', JSON.stringify(userData));
+      setSecureStorage('token', response.data.token);
+      setSecureStorage('user', JSON.stringify(userData));
       
       // Set auth header
       api.defaults.headers.common['Authorization'] = `Bearer ${response.data.token}`;
       
       setUser(userData);
       
-      // Redirect based on role
-      const redirectPath = {
-        clerk: '/clerk/dashboard',
-        admin: '/admin/dashboard',
-        merchant: '/merchant/dashboard'
-      }[userData.role] || '/';
+      // Redirect based on role and previous location
+      const redirectPath = location.state?.from?.pathname || 
+        {
+          clerk: '/clerk/dashboard',
+          admin: '/admin/dashboard',
+          merchant: '/merchant/dashboard'
+        }[userData.role] || '/';
       
-      navigate(redirectPath);
+      navigate(redirectPath, { replace: true });
       
-      return { success: true };
+      return { success: true, user: userData };
     } catch (err) {
-      const errorMessage = err.response?.data?.message || 'Login failed';
+      let errorMessage = 'Login failed';
+      
+      if (err.response) {
+        errorMessage = err.response.data?.message || 
+          err.response.status === 401 ? 'Invalid credentials' : 
+          err.response.status === 403 ? 'Account not active' : 
+          'Authentication error';
+      }
+      
       setError(errorMessage);
-      return { success: false, message: errorMessage };
+      return { 
+        success: false, 
+        message: errorMessage,
+        status: err.response?.status 
+      };
     } finally {
       setLoading(false);
     }
   };
 
   const logout = useCallback(() => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    delete api.defaults.headers.common['Authorization'];
-    setUser(null);
-    setError(null);
-    navigate('/login');
-  }, [navigate]);
+    try {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      delete api.defaults.headers.common['Authorization'];
+      setUser(null);
+      setError(null);
+      
+      // Preserve current location for redirect back after login
+      navigate('/login', { 
+        state: { from: location },
+        replace: true 
+      });
+    } catch (err) {
+      console.error('Logout error:', err);
+    }
+  }, [navigate, location]);
 
   // Refresh user data
   const refreshUser = async () => {
@@ -92,20 +149,36 @@ export const AuthProvider = ({ children }) => {
         ...response.data,
         role: response.data.role.toLowerCase()
       };
-      localStorage.setItem('user', JSON.stringify(userData));
+      setSecureStorage('user', JSON.stringify(userData));
       setUser(userData);
-      return userData;
+      return { success: true, user: userData };
     } catch (err) {
       console.error('Failed to refresh user:', err);
       logout();
-      return null;
+      return { success: false, error: err.message };
     }
   };
 
-  // Check user permission
-  const hasPermission = (requiredRole) => {
+  // Enhanced permission checking
+  const hasPermission = (requiredRoles) => {
     if (!user) return false;
-    return user.role === requiredRole.toLowerCase();
+    
+    if (Array.isArray(requiredRoles)) {
+      return requiredRoles.some(role => 
+        user.role === role.toLowerCase()
+      );
+    }
+    return user.role === requiredRoles.toLowerCase();
+  };
+
+  // Check if route requires authentication
+  const isRouteProtected = (path) => {
+    const protectedRoutes = [
+      '/clerk',
+      '/admin',
+      '/merchant'
+    ];
+    return protectedRoutes.some(route => path.startsWith(route));
   };
 
   const value = {
@@ -116,6 +189,7 @@ export const AuthProvider = ({ children }) => {
     logout,
     refreshUser,
     hasPermission,
+    isRouteProtected,
     isAuthenticated: !!user,
     setError
   };

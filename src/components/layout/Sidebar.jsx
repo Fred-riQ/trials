@@ -1,103 +1,294 @@
 import React from 'react';
-import { NavLink, useLocation } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
-import { FiHome, FiUser, FiPackage, FiShoppingBag, FiUsers, FiFileText, FiArchive, FiPieChart } from 'react-icons/fi';
+import { NavLink, useLocation, matchPath } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext';
+import { 
+  FiHome, FiUser, FiPackage, FiShoppingBag, 
+  FiUsers, FiFileText, FiArchive, FiPieChart,
+  FiSettings, FiLogOut, FiChevronDown, FiChevronRight
+} from 'react-icons/fi';
+import classNames from 'classnames';
 
 const Sidebar = () => {
-  const { user, loading } = useAuth();
+  const { user, loading, logout } = useAuth();
   const location = useLocation();
+  const [expandedMenus, setExpandedMenus] = React.useState({});
+  const [collapsed, setCollapsed] = React.useState(false);
 
-  if (loading) return <div className="w-64 bg-gray-800 h-full"></div>; // Loading state
-  if (!user) return null;
-
-  // Icon mapping for consistent icon usage
-  const iconComponents = {
-    dashboard: <FiHome className="mr-3" size={18} />,
-    profile: <FiUser className="mr-3" size={18} />,
-    stock: <FiPackage className="mr-3" size={18} />,
-    requests: <FiFileText className="mr-3" size={18} />,
-    users: <FiUsers className="mr-3" size={18} />,
-    stores: <FiShoppingBag className="mr-3" size={18} />,
-    reports: <FiPieChart className="mr-3" size={18} />,
-    default: <FiArchive className="mr-3" size={18} />
+  // Toggle menu expansion
+  const toggleMenu = (menuKey) => {
+    setExpandedMenus(prev => ({
+      ...prev,
+      [menuKey]: !prev[menuKey]
+    }));
   };
 
-  // Common links for all roles
-  const commonLinks = [
-    { to: '/', text: 'Dashboard', icon: 'dashboard' },
-    { to: '/profile', text: 'Profile', icon: 'profile' }
-  ];
+  // Icon mapping with consistent sizing
+  const iconComponents = {
+    dashboard: <FiHome size={18} />,
+    profile: <FiUser size={18} />,
+    stock: <FiPackage size={18} />,
+    requests: <FiFileText size={18} />,
+    users: <FiUsers size={18} />,
+    stores: <FiShoppingBag size={18} />,
+    reports: <FiPieChart size={18} />,
+    settings: <FiSettings size={18} />,
+    default: <FiArchive size={18} />
+  };
 
-  // Role-specific links
-  const roleLinks = {
+  // Navigation configuration
+  const navConfig = {
+    common: [
+      { 
+        path: '/', 
+        label: 'Dashboard', 
+        icon: 'dashboard',
+        exact: true
+      },
+      { 
+        path: '/profile', 
+        label: 'Profile', 
+        icon: 'profile'
+      }
+    ],
     clerk: [
-      { to: '/stock', text: 'Stock Management', icon: 'stock' },
-      { to: '/requests', text: 'My Requests', icon: 'requests' }
+      {
+        label: 'Inventory',
+        icon: 'stock',
+        submenu: [
+          { path: '/stock', label: 'Stock Management' },
+          { path: '/requests', label: 'My Requests' }
+        ]
+      }
     ],
     admin: [
-      { to: '/users', text: 'User Management', icon: 'users' },
-      { to: '/all-requests', text: 'All Requests', icon: 'requests' },
-      { to: '/reports', text: 'Reports', icon: 'reports' }
+      { 
+        path: '/users', 
+        label: 'User Management', 
+        icon: 'users'
+      },
+      {
+        label: 'Requests',
+        icon: 'requests',
+        submenu: [
+          { path: '/all-requests', label: 'All Requests' },
+          { path: '/pending-approvals', label: 'Pending Approvals' }
+        ]
+      },
+      { 
+        path: '/reports', 
+        label: 'Reports', 
+        icon: 'reports'
+      }
     ],
     merchant: [
-      { to: '/stores', text: 'My Stores', icon: 'stores' },
-      { to: '/reports', text: 'Reports', icon: 'reports' }
+      { 
+        path: '/stores', 
+        label: 'My Stores', 
+        icon: 'stores'
+      },
+      {
+        label: 'Analytics',
+        icon: 'reports',
+        submenu: [
+          { path: '/sales-reports', label: 'Sales Reports' },
+          { path: '/inventory-reports', label: 'Inventory Reports' }
+        ]
+      }
     ]
   };
 
-  // Get icon component
   const getIcon = (iconName) => iconComponents[iconName] || iconComponents.default;
 
+  // Check if path is active (including submenu items)
+  const isActive = (path, exact = false) => {
+    return matchPath({ path, exact }, location.pathname);
+  };
+
+  // Handle logout
+  const handleLogout = () => {
+    logout();
+  };
+
+  if (loading) return (
+    <div className={classNames(
+      "bg-gray-800 text-white h-full flex-shrink-0 transition-all duration-300",
+      collapsed ? "w-20" : "w-64"
+    )}></div>
+  );
+
+  if (!user) return null;
+
   return (
-    <div className="w-64 bg-gray-800 text-white h-full flex flex-col fixed left-0 top-0 bottom-0 z-40">
-      {/* Brand/Header section */}
-      <div className="p-5 border-b border-gray-700">
-        <h2 className="text-xl font-bold flex items-center">
-          <FiShoppingBag className="mr-2" size={20} />
-          MyDuka
-        </h2>
+    <div className={classNames(
+      "bg-gray-800 text-white h-full flex flex-col fixed left-0 top-0 bottom-0 z-40 transition-all duration-300",
+      collapsed ? "w-20" : "w-64"
+    )}>
+      {/* Brand/Header with collapse button */}
+      <div className="p-4 border-b border-gray-700 flex items-center justify-between">
+        {!collapsed && (
+          <h2 className="text-xl font-bold flex items-center">
+            <FiShoppingBag className="mr-2" size={20} />
+            MyDuka
+          </h2>
+        )}
+        <button 
+          onClick={() => setCollapsed(!collapsed)}
+          className="text-gray-400 hover:text-white p-1 rounded-md hover:bg-gray-700"
+          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+        >
+          {collapsed ? <FiChevronRight size={20} /> : <FiChevronDown size={20} />}
+        </button>
       </div>
 
-      {/* User info section */}
+      {/* User profile */}
       <div className="p-4 border-b border-gray-700">
         <div className="flex items-center space-x-3">
-          <div className="bg-blue-600 rounded-full w-10 h-10 flex items-center justify-center">
+          <div className="bg-blue-600 rounded-full w-10 h-10 flex items-center justify-center flex-shrink-0">
             {user.username?.charAt(0).toUpperCase() || user.email?.charAt(0).toUpperCase()}
           </div>
-          <div>
-            <p className="font-medium truncate">{user.username || user.email}</p>
-            <p className="text-xs text-gray-400 capitalize">{user.role}</p>
-          </div>
+          {!collapsed && (
+            <div className="overflow-hidden">
+              <p className="font-medium truncate">{user.username || user.email}</p>
+              <p className="text-xs text-gray-400 capitalize">{user.role}</p>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Navigation links */}
+      {/* Navigation */}
       <nav className="flex-1 overflow-y-auto py-4">
         <ul className="space-y-1 px-2">
-          {[...commonLinks, ...(roleLinks[user.role] || [])].map((link) => (
-            <li key={link.to}>
+          {/* Common links */}
+          {navConfig.common.map((item) => (
+            <li key={item.path}>
               <NavLink
-                to={link.to}
+                to={item.path}
                 className={({ isActive }) =>
-                  `flex items-center px-4 py-3 rounded-md transition-colors ${
-                    isActive 
-                      ? 'bg-blue-700 text-white' 
-                      : 'text-gray-300 hover:bg-gray-700 hover:text-white'
-                  }`
+                  classNames(
+                    "flex items-center px-3 py-3 rounded-md transition-colors",
+                    {
+                      'bg-blue-700 text-white': isActive,
+                      'text-gray-300 hover:bg-gray-700 hover:text-white': !isActive,
+                      'justify-center': collapsed
+                    }
+                  )
                 }
-                aria-current={location.pathname === link.to ? 'page' : undefined}
+                aria-current={isActive(item.path, item.exact) ? "page" : undefined}
               >
-                {getIcon(link.icon)}
-                {link.text}
+                <span className={classNames(
+                  "flex items-center",
+                  { 'mr-3': !collapsed }
+                )}>
+                  {getIcon(item.icon)}
+                  {!collapsed && <span className="ml-3">{item.label}</span>}
+                </span>
               </NavLink>
             </li>
           ))}
+
+          {/* Role-specific links */}
+          {(navConfig[user.role] || []).map((item, index) => {
+            if (item.path) {
+              // Simple link without submenu
+              return (
+                <li key={item.path}>
+                  <NavLink
+                    to={item.path}
+                    className={({ isActive }) =>
+                      classNames(
+                        "flex items-center px-3 py-3 rounded-md transition-colors",
+                        {
+                          'bg-blue-700 text-white': isActive,
+                          'text-gray-300 hover:bg-gray-700 hover:text-white': !isActive,
+                          'justify-center': collapsed
+                        }
+                      )
+                    }
+                  >
+                    <span className={classNames(
+                      "flex items-center",
+                      { 'mr-3': !collapsed }
+                    )}>
+                      {getIcon(item.icon)}
+                      {!collapsed && <span className="ml-3">{item.label}</span>}
+                    </span>
+                  </NavLink>
+                </li>
+              );
+            } else if (item.submenu && !collapsed) {
+              // Expandable menu
+              const isMenuExpanded = expandedMenus[`menu-${index}`];
+              const hasActiveChild = item.submenu.some(subItem => 
+                isActive(subItem.path)
+              );
+
+              return (
+                <li key={`menu-${index}`}>
+                  <button
+                    onClick={() => toggleMenu(`menu-${index}`)}
+                    className={classNames(
+                      "w-full flex items-center justify-between px-3 py-3 rounded-md transition-colors",
+                      {
+                        'text-white bg-gray-700': hasActiveChild,
+                        'text-gray-300 hover:bg-gray-700 hover:text-white': !hasActiveChild
+                      }
+                    )}
+                  >
+                    <span className="flex items-center">
+                      {getIcon(item.icon)}
+                      <span className="ml-3">{item.label}</span>
+                    </span>
+                    {isMenuExpanded ? <FiChevronDown size={16} /> : <FiChevronRight size={16} />}
+                  </button>
+
+                  {isMenuExpanded && (
+                    <ul className="ml-8 mt-1 space-y-1">
+                      {item.submenu.map((subItem) => (
+                        <li key={subItem.path}>
+                          <NavLink
+                            to={subItem.path}
+                            className={({ isActive }) =>
+                              classNames(
+                                "block px-3 py-2 rounded-md text-sm transition-colors",
+                                {
+                                  'bg-blue-700 text-white': isActive,
+                                  'text-gray-400 hover:bg-gray-700 hover:text-white': !isActive
+                                }
+                              )
+                            }
+                          >
+                            {subItem.label}
+                          </NavLink>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </li>
+              );
+            }
+            return null;
+          })}
         </ul>
       </nav>
 
-      {/* Footer section */}
-      <div className="p-4 border-t border-gray-700 text-xs text-gray-400">
-        v{process.env.REACT_APP_VERSION || '1.0.0'}
+      {/* Footer */}
+      <div className="p-4 border-t border-gray-700">
+        <button
+          onClick={handleLogout}
+          className={classNames(
+            "w-full flex items-center px-3 py-2 rounded-md text-gray-300 hover:bg-gray-700 hover:text-white transition-colors",
+            { 'justify-center': collapsed }
+          )}
+          aria-label="Logout"
+        >
+          <FiLogOut size={18} />
+          {!collapsed && <span className="ml-3">Logout</span>}
+        </button>
+        {!collapsed && (
+          <div className="text-xs text-gray-400 mt-2">
+            v{process.env.REACT_APP_VERSION || '1.0.0'}
+          </div>
+        )}
       </div>
     </div>
   );
